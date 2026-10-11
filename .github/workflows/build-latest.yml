@@ -1,0 +1,99 @@
+name: Build Latest HLAE Package
+
+# Builds a full HLAE release package (hlae.zip) from the current revision of
+# this fork, so unreleased commits on main can be tested without waiting for
+# an official build. WiX installer creation is skipped, the plain package ZIP
+# that the official release ships is produced instead.
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Tag for the GitHub Release (recreated on each run)"
+        required: false
+        default: "latest-build"
+      create_release:
+        description: "Also publish a GitHub Release with the built ZIP"
+        type: boolean
+        required: false
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 240
+
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Report revision
+        shell: bash
+        run: |
+          echo "Building revision: $(git rev-parse HEAD)"
+          git log -1 --format='Subject: %s'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Setup Scoop
+        uses: MinoruSekine/setup-scoop@v4
+
+      - name: Install gettext
+        run: scoop install gettext
+
+      - name: Ensure Rust targets
+        shell: bash
+        run: |
+          rustup target list --installed
+          rustup target add \
+            --toolchain stable-x86_64-pc-windows-msvc \
+            i686-pc-windows-msvc
+
+      - name: Configure and build package
+        run: cmake -DAFX_MULTIBUILD_INSTALLER=OFF -P cmake/MultiBuild.cmake
+
+      - name: Verify package output
+        shell: bash
+        run: |
+          ls -lh build/package-release/hlae.zip
+          ls -lh build/package-release/hlae_pdb.zip
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: hlae-package-${{ github.sha }}
+          path: |
+            build/package-release/hlae.zip
+            build/package-release/hlae_pdb.zip
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Publish GitHub Release
+        if: ${{ inputs.create_release }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$TAG" \
+            build/package-release/hlae.zip \
+            build/package-release/hlae_pdb.zip \
+            --title "HLAE latest build - ${TAG}" \
+            --notes "Unofficial build from commit ${GITHUB_SHA}.
+
+          Built from the current revision of this fork (which may include
+          unreleased commits), using AFX_MULTIBUILD_INSTALLER=OFF so the WiX
+          installer is skipped and only the plain package ZIP is produced.
+
+          - hlae.zip - same layout as the official release package.
+          - hlae_pdb.zip - debug symbols."
