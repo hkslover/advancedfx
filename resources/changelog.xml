@@ -6,6 +6,16 @@
 
 <release>
 <name>HLAE</name>
+<version>2.192.7.1</version>
+<time>2026-10-11T08:10Z</time>
+<changes>
+<change type="fixed">Fixed recorded video freezing at the end of a round (advancedfx/advancedfx#1236)</change>
+</changes>
+</release>
+
+
+<release>
+<name>HLAE</name>
 <version>2.192.7</version>
 <time>2026-10-08T13:56Z</time>
 <changes>

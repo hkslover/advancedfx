@@ -8,10 +8,10 @@ name: Build Latest HLAE Package
 on:
   workflow_dispatch:
     inputs:
-      release_tag:
-        description: "Tag for the GitHub Release (recreated on each run)"
-        required: false
-        default: "latest-build"
+      version:
+        description: "Package version, e.g. 2.192.7.1 (tag becomes v<version>, asset hlae_<a_b_c_d>.zip)"
+        required: true
+        default: "2.192.7.1"
       create_release:
         description: "Also publish a GitHub Release with the built ZIP"
         type: boolean
@@ -81,19 +81,23 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ inputs.release_tag }}
+          VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
+          TAG="v${VERSION}"
+          STEM="hlae_$(printf '%s' "${VERSION}" | tr '.' '_')"
+          cp build/package-release/hlae.zip "build/package-release/${STEM}.zip"
+          cp build/package-release/hlae_pdb.zip "build/package-release/${STEM}_pdb.zip"
           gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
           gh release create "$TAG" \
-            build/package-release/hlae.zip \
-            build/package-release/hlae_pdb.zip \
-            --title "HLAE latest build - ${TAG}" \
+            "build/package-release/${STEM}.zip" \
+            "build/package-release/${STEM}_pdb.zip" \
+            --title "HLAE ${VERSION}" \
             --notes "Unofficial build from commit ${GITHUB_SHA}.
 
-          Built from the current revision of this fork (which may include
-          unreleased commits), using AFX_MULTIBUILD_INSTALLER=OFF so the WiX
-          installer is skipped and only the plain package ZIP is produced.
+          Built from the current revision of this fork, using
+          AFX_MULTIBUILD_INSTALLER=OFF so the WiX installer is skipped and only
+          the plain package ZIP is produced.
 
-          - hlae.zip - same layout as the official release package.
-          - hlae_pdb.zip - debug symbols."
+          - ${STEM}.zip - same layout as the official release package.
+          - ${STEM}_pdb.zip - debug symbols."
